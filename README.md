@@ -22,6 +22,7 @@ Next.js 控制面板，用一台主机通过 SSH 轮询多台 GPU 机器的 `nvi
 - （可选）Telegram Bot 与 chat id
 
 ## 配置
+### 1. 运行参数（.env.local）
 在项目根目录创建 `.env.local`（Next.js 自动加载）：
 
 ```bash
@@ -31,12 +32,41 @@ TELEGRAM_CHAT_ID=YOUR_CHAT_ID
 # TELEGRAM_DISABLE_NOTIFICATIONS=true
 
 # 轮询主机定义，支持 local 或 ssh（JSON 字符串）
-GPU_WATCHER_HOSTS=[{"id":"lab","label":"lab","connection":{"type":"ssh","host":"211.71.15.50","username":"farong","privateKeyPath":"~/.ssh/id_rsa"}},{"id":"4090","label":"4090","connection":{"type":"ssh","host":"10.134.48.81","username":"farong","privateKeyPath":"~/.ssh/id_ed25519"}},{"id":"5090","label":"5090","connection":{"type":"ssh","host":"10.134.48.74","username":"farong","privateKeyPath":"~/.ssh/id_ed25519"}}]
-
 # 可选：调整采样与空闲判定
 GPU_WATCHER_POLL_INTERVAL_MS=60000        # 默认 60s
 GPU_IDLE_WINDOW=5                         # 连续 5 次
 GPU_IDLE_THRESHOLD=0.1                    # 显存占比 10%
+
+# 可选：指定主机文件位置，默认 data/hosts.json
+# GPU_WATCHER_HOSTS_FILE=./config/hosts.json
+```
+
+### 2. 主机列表：多行 JSON 文件更方便
+- 不再推荐把整段 JSON 塞进 `GPU_WATCHER_HOSTS`。
+- 直接编辑 `data/hosts.json`（启动后若无此文件会自动创建），或设置 `GPU_WATCHER_HOSTS_FILE=/path/to/hosts.json` 指向任意位置。
+- 文件使用标准 JSON，可多行书写，示例见 `docs/hosts.sample.json`：
+
+```json
+[
+  {
+    "id": "lab",
+    "connection": {
+      "type": "ssh",
+      "host": "211.71.15.50",
+      "username": "farong",
+      "privateKeyPath": "~/.ssh/id_ed25519"
+    }
+  },
+  {
+    "id": "4090",
+    "connection": {
+      "type": "ssh",
+      "host": "10.134.48.81",
+      "username": "farong",
+      "privateKeyPath": "~/.ssh/id_ed25519"
+    }
+  }
+]
 ```
 
 说明：

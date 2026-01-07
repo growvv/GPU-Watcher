@@ -1,0 +1,22 @@
+[
+  {
+    "id": "lab",
+    "label": "lab",
+    "connection": {
+      "type": "ssh",
+      "host": "211.71.15.50",
+      "username": "farong",
+      "privateKeyPath": "~/.ssh/id_ed25519"
+    }
+  },
+  {
+    "id": "4090",
+    "label": "workstation-4090",
+    "connection": {
+      "type": "ssh",
+      "host": "10.134.48.81",
+      "username": "farong",
+      "privateKeyPath": "~/.ssh/id_ed25519"
+    }
+  }
+]
