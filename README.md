@@ -8,6 +8,8 @@ Next.js 控制面板，用一台主机通过 SSH 轮询多台 GPU 机器的 `nvi
 - `docs/overview.md`：背景/目标/架构/数据流/界面设计
 - `docs/implementation.md`：服务端与前端模块拆解、API、运行方式与排障说明
 
+![Dashboard Preview](docs/asserts/index.png)
+
 ## 功能
 - 每分钟并行执行 `nvidia-smi`，采集显存、利用率、温度、进程列表，写入本地 SQLite (`data/gpu_watcher.db`)。
 - 计算事件：进程上线 / 下线、GPU 连续 5 分钟显存占用 < 10% 视为空闲、主机离线 / 恢复。
