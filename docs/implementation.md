@@ -3,16 +3,16 @@
 ## 目录速查
 | 路径 | 说明 |
 | --- | --- |
-| `data/hosts.json` | 主机配置文件（由 UI 或环境变量写入） |
-| `data/settings.json` | 运行时配置：轮询、空闲阈值、置顶/隐藏主机、Telegram 参数 |
+| `config/hosts.json` | 主机配置文件（由 UI 写入，可手动编辑，多行 JSON） |
+| `config/settings.json` | 运行时配置：轮询/空闲阈值/统计窗口/Telegram 等，UI 会落盘 |
 | `src/server/` | Node 端核心：轮询、命令执行、解析 `nvidia-smi`、数据库、通知 |
 | `src/app/api/*` | 前端使用的 Next.js Route Handler，暴露状态/事件/统计等 JSON |
 | `src/components/dashboard/` | 客户端 Dashboard 组件，包含所有页签逻辑、主题切换、弹窗等 |
 
 ## 服务端
 ### 配置加载 (`src/config/*`)
-- `hosts.ts`：统一读取/写入 `data/hosts.json`，支持从 `GPU_WATCHER_HOSTS` 字符串初始化；可处理 `local` 与 `ssh` 类型连接。
-- `runtime.ts`：整合环境变量与 `data/settings.json`，暴露 `getRuntimeConfig`/`updateRuntimeConfig`，包括 `pollIntervalMs`、`idleThreshold`、`pinnedHosts`、`hiddenHosts`、Telegram 设置等。
+- `hosts.ts`：统一读取/写入 `config/hosts.json`（或 `GPU_WATCHER_HOSTS_FILE` 指定路径），支持热加载，多客户端编辑也能生效。
+- `runtime.ts`：读取/写入 `config/settings.json`，暴露 `getRuntimeConfig`/`updateRuntimeConfig`，包括 `pollIntervalMs`、`idleThreshold`、`pinnedHosts`、`hiddenHosts`、Telegram 设置等，并在文件变动时自动重新加载。
 
 ### 命令执行 (`src/server/commandRunner.ts`)
 - `ssh2` `Client` + `wrapRemoteCommand("bash -lc ...")`，默认私钥 `~/.ssh/id_ed25519`，也支持 agent (`SSH_AUTH_SOCK`)。
@@ -70,9 +70,9 @@
 - `document.documentElement.dataset.theme` + localStorage 记忆用户选择。
 
 ## 运行方式
-1. 在部署主机写入 `.env.local` 以及 `data/hosts.json`（可通过 UI 添加）。
+1. 首次启动后生成 `config/hosts.json` 与 `config/settings.json`，按需编辑（或直接在网页 “设置/主机” 页面修改）。
 2. `npm run build && npm start`，默认监听 `0.0.0.0:8005`，可通过 Nginx 反代。
-3. 通过 UI 添加 Telegram Token / Chat ID，并点击“发送测试”验证。
+3. 在 UI 中录入 Telegram Token / Chat ID（会写入 `config/settings.json`），并点击“发送测试”验证。
 4. 主机状态页可置顶常用 host、隐藏不再关注的 host（隐藏后在 GPU/统计中不再显示，但仍在设置页可恢复）。
 
 ## 故障排查

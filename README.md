@@ -1,14 +1,11 @@
 # GPU Watcher
 
+![Dashboard Preview](docs/asserts/index.png)
+
 Next.js 控制面板，用一台主机通过 SSH 轮询多台 GPU 机器的 `nvidia-smi`，记录显卡实时状态、进程上下线、主机离线情况，并把 GPU 空闲或主机离线事件发送到 Telegram。
 
 > 有多台服务器并行跑实验，之前必须逐台 SSH 查看 `nvidia-smi` 才能知道有哪些空闲 GPU，非常低效。GPU Watcher 通过单一面板聚合所有主机状态，确认空闲资源和排查任务只需看一个页面。
 
-更详细的设计与实现笔记见 `docs/` 目录：
-- `docs/overview.md`：背景/目标/架构/数据流/界面设计
-- `docs/implementation.md`：服务端与前端模块拆解、API、运行方式与排障说明
-
-![Dashboard Preview](docs/asserts/index.png)
 
 ## 功能
 - 每分钟并行执行 `nvidia-smi`，采集显存、利用率、温度、进程列表，写入本地 SQLite (`data/gpu_watcher.db`)。
@@ -22,29 +19,53 @@ Next.js 控制面板，用一台主机通过 SSH 轮询多台 GPU 机器的 `nvi
 - （可选）Telegram Bot 与 chat id
 
 ## 配置
-### 1. 运行参数（.env.local）
-在项目根目录创建 `.env.local`（Next.js 自动加载）：
+所有配置放在仓库根目录的 `config/` 中，并且会被自动创建/更新：
 
-```bash
-TELEGRAM_BOT_TOKEN=YOUR_TELEGRAM_BOT_TOKEN
-TELEGRAM_CHAT_ID=YOUR_CHAT_ID
-# 可选：关闭通知（例如测试环境无外网）
-# TELEGRAM_DISABLE_NOTIFICATIONS=true
+1. **`config/hosts.json`** – 主机列表，UI 也会写入此文件。支持多行 JSON，示例参见 `docs/hosts.sample.json`。字段含义：
+   - `id`: 唯一 ID，UI 展示及 API 使用。
+   - `label`: 可选别名。
+   - `connection`: `type: "ssh"`/`"local"`；SSH 需提供 `host`、`username`、可选 `privateKeyPath`（默认 `~/.ssh/id_ed25519`）。
+2. **`config/settings.json`** – 运行参数（轮询频率、空闲窗口、曲线窗口、置顶/隐藏主机、Telegram Token/Chat ID 等）。通过网页 “设置” 标签修改后会立即落盘；若手动编辑 JSON，前端也会热加载。
 
-# 轮询主机定义，支持 local 或 ssh（JSON 字符串）
-# 可选：调整采样与空闲判定
-GPU_WATCHER_POLL_INTERVAL_MS=60000        # 默认 60s
-GPU_IDLE_WINDOW=5                         # 连续 5 次
-GPU_IDLE_THRESHOLD=0.1                    # 显存占比 10%
+首次启动会生成如下默认结构，可直接编辑：
 
-# 可选：指定主机文件位置，默认 data/hosts.json
-# GPU_WATCHER_HOSTS_FILE=./config/hosts.json
+```jsonc
+// config/settings.json
+{
+  "pollIntervalMs": 60000,
+  "idleWindow": 5,
+  "idleThreshold": 0.1,
+  "chartWindowHours": 24,
+  "pinnedHosts": [],
+  "hiddenHosts": [],
+  "telegram": {
+    "botToken": "",
+    "chatId": "",
+    "disableNotifications": false
+  }
+}
 ```
 
-### 2. 主机列表：多行 JSON 文件更方便
-- 不再推荐把整段 JSON 塞进 `GPU_WATCHER_HOSTS`。
-- 直接编辑 `data/hosts.json`（启动后若无此文件会自动创建），或设置 `GPU_WATCHER_HOSTS_FILE=/path/to/hosts.json` 指向任意位置。
-- 文件使用标准 JSON，可多行书写，示例见 `docs/hosts.sample.json`：
+```jsonc
+// config/hosts.json
+[
+  {
+    "id": "lab",
+    "label": "lab",
+    "connection": {
+      "type": "ssh",
+      "host": "211.71.15.50",
+      "username": "farong",
+      "privateKeyPath": "~/.ssh/id_ed25519"
+    }
+  }
+]
+```
+
+说明：
+- 直接编辑 JSON 文件即可生效；服务会在下次轮询前自动重新加载。
+- `config/hosts.json` / `config/settings.json` 默认被 `.gitignore` 忽略，避免把私钥路径、Telegram Token 等敏感信息提交到仓库。
+- 如果机器无法连接，会写入事件 `host_offline` 并推送 Telegram；恢复时写入 `host_online`。
 
 ```json
 [
@@ -69,10 +90,7 @@ GPU_IDLE_THRESHOLD=0.1                    # 显存占比 10%
 ]
 ```
 
-说明：
-- `type: "local"` 会直接在本机运行命令；`type: "ssh"` 使用 `ssh2`，默认从 `~/.ssh/id_ed25519` 读取私钥（也支持 SSH Agent，或通过 `privateKeyPath` 指定例如 `~/.ssh/id_rsa`）。
-- `GPU_WATCHER_DB_PATH` 可自定义数据库文件位置（默认 `data/gpu_watcher.db`）。
-- 如果机器无法连接，会写入事件 `host_offline` 并推送 Telegram；恢复时写入 `host_online`。
+> 如果需要放置在其它目录，可通过环境变量 `GPU_WATCHER_HOSTS_FILE` / `GPU_WATCHER_RUNTIME_FILE` 指定 JSON 路径，但日常使用建议直接编辑 `config/*.json`。
 
 ## 开发 / 运行
 ```bash

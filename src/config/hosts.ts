@@ -28,7 +28,7 @@ const fallbackHosts: HostConfig[] = [];
 
 const HOSTS_FILE =
   process.env.GPU_WATCHER_HOSTS_FILE ??
-  path.join(process.cwd(), 'data', 'hosts.json');
+  path.join(process.cwd(), 'config', 'hosts.json');
 
 function getHostsFileMtime() {
   if (!fs.existsSync(HOSTS_FILE)) {
@@ -45,20 +45,6 @@ function ensureHostsDir() {
   const dir = path.dirname(HOSTS_FILE);
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
-  }
-}
-
-function tryParseHosts(raw: string | undefined) {
-  if (!raw || raw.trim() === '') {
-    return null;
-  }
-  try {
-    return hostsSchema.parse(JSON.parse(raw));
-  } catch (error) {
-    if (process.env.NODE_ENV !== 'production') {
-      console.error('[gpu-watcher] Failed to parse GPU_WATCHER_HOSTS', error);
-    }
-    return null;
   }
 }
 
@@ -84,12 +70,6 @@ function loadInitialHosts(): HostConfig[] {
   const fileHosts = readHostsFile();
   if (fileHosts) {
     return fileHosts;
-  }
-
-  const envHosts = tryParseHosts(process.env.GPU_WATCHER_HOSTS);
-  if (envHosts) {
-    writeHostsFile(envHosts);
-    return envHosts;
   }
 
   writeHostsFile(fallbackHosts);

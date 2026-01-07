@@ -62,6 +62,7 @@ async function processSnapshot(
   snapshot: SnapshotInput,
   idleWindow: number,
   idleThreshold: number,
+  pollIntervalMs: number,
 ) {
   const savedSnapshot = store.recordSnapshot(snapshot);
   const previousStatus = store.getGpuStatus(
@@ -74,26 +75,25 @@ async function processSnapshot(
       ? snapshot.memoryUsedMb / snapshot.memoryTotalMb
       : 0;
 
-  const history = buildMemoryHistory(
-    previousStatus?.memoryHistory ?? [],
-    memoryRatio,
-    idleWindow,
-  );
+  const targetWindow = Math.max(1, idleWindow);
+  const lastSeenGap = previousStatus?.lastSeen
+    ? snapshot.collectedAt - previousStatus.lastSeen
+    : Number.POSITIVE_INFINITY;
+  const shouldResetHistory =
+    !previousStatus ||
+    !previousStatus.lastSeen ||
+    lastSeenGap > pollIntervalMs * targetWindow;
+  const history = shouldResetHistory
+    ? Array(targetWindow).fill(memoryRatio)
+    : buildMemoryHistory(
+        previousStatus?.memoryHistory ?? [],
+        memoryRatio,
+        targetWindow,
+      );
 
-  const shouldBootstrapIdle =
-    history.length > 0 && history.length < idleWindow;
-  const evaluationHistory =
-    shouldBootstrapIdle && history.length > 0
-      ? [
-          ...history,
-          ...Array(idleWindow - history.length).fill(
-            history[history.length - 1],
-          ),
-        ]
-      : history;
   const meetsIdleCriteria =
-    evaluationHistory.length === idleWindow &&
-    evaluationHistory.every((value) => value < idleThreshold);
+    history.length === targetWindow &&
+    history.every((value) => value < idleThreshold);
   const wasIdle = previousStatus?.isIdle ?? false;
 
   let idleSince = previousStatus?.idleSince;
@@ -208,7 +208,11 @@ async function processSnapshot(
 async function handleHostSuccess(
   host: HostConfig,
   snapshots: SnapshotInput[],
-  config: { idleWindow: number; idleThreshold: number },
+  config: {
+    idleWindow: number;
+    idleThreshold: number;
+    pollIntervalMs: number;
+  },
 ) {
   const previousStatus = store.getHostStatus(host.id);
   const now = Date.now();
@@ -239,6 +243,7 @@ async function handleHostSuccess(
       snapshot,
       config.idleWindow,
       config.idleThreshold,
+      config.pollIntervalMs,
     );
   }
 }
@@ -276,7 +281,11 @@ async function handleHostError(host: HostConfig, error: Error) {
 
 async function pollHost(
   host: HostConfig,
-  config: { idleWindow: number; idleThreshold: number },
+  config: {
+    idleWindow: number;
+    idleThreshold: number;
+    pollIntervalMs: number;
+  },
 ) {
   try {
     const snapshots = await collectSnapshotsForHost(host);
@@ -306,6 +315,7 @@ function createPoller() {
         await pollHost(host, {
           idleWindow: config.idleWindow,
           idleThreshold: config.idleThreshold,
+          pollIntervalMs: config.pollIntervalMs ?? 60_000,
         });
       }
     } catch (error) {

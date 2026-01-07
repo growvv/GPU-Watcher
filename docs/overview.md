@@ -25,12 +25,12 @@
 ```
 
 - **前端**：`src/components/dashboard/Dashboard.tsx`，使用 SWR 轮询 `/api/status`、`/api/events`、`/api/stats`，结合 Recharts 绘制曲线。
-- **后端**：`src/server/poller.ts` 定时读取主机列表（`data/hosts.json`），通过 `ssh2` 执行两条命令：GPU 概况与进程列表，解析写入 `gpu_snapshots` 表。
+- **后端**：`src/server/poller.ts` 定时读取主机列表（`config/hosts.json`），通过 `ssh2` 执行两条命令：GPU 概况与进程列表，解析写入 `gpu_snapshots` 表。
 - **存储**：`data/gpu_watcher.db`，内含 `gpu_snapshots`、`gpu_events`、`host_status` 等表，配有索引支持按 host/gpu/time 查询。
 - **通知**：`src/server/telegram.ts` 用 `https` + `dns.lookup` (IPv4 强制) 推送事件。UI 提供 Bot Token / Chat ID 配置与测试按钮。
 
 ## 数据流
-1. **配置**：`data/hosts.json` 标准化 host 描述；`data/settings.json` 保存轮询间隔、空闲判定、置顶/隐藏主机等。
+1. **配置**：`config/hosts.json` 标准化 host 描述；`config/settings.json` 保存轮询间隔、空闲判定、置顶/隐藏主机等。
 2. **轮询**：`poller.run()` 每 `pollIntervalMs` 遍历 host -> `runCommand` (local or ssh) -> `parseGpuRows` / `parseProcessRows` -> `enrichProcessDetails` 捕获 `ps`, `docker inspect`。
 3. **事件计算**：`store.upsertGpuSnapshot` 会比较历史状态，触发 `process_online/offline`, `gpu_idle/busy`, `host_offline/online`，每条事件写入 `gpu_events` 并可能 `sendTelegramMessage`。
 4. **前端渲染**：Dashboard 根据 host/gpu 分组渲染卡片，进程列表点击弹窗查看用户/容器/父进程详情；图表按 24h 数据绘制，统计页聚合 usage/coverage/average 等指标。

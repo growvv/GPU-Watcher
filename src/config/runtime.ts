@@ -20,9 +20,19 @@ const runtimeSchema = z.object({
 
 export type RuntimeConfig = z.infer<typeof runtimeSchema>;
 
+const DEFAULT_RUNTIME: RuntimeConfig = {
+  pollIntervalMs: 60_000,
+  idleWindow: 5,
+  idleThreshold: 0.1,
+  chartWindowHours: 24,
+  pinnedHosts: [],
+  hiddenHosts: [],
+  telegram: {},
+};
+
 const RUNTIME_FILE =
   process.env.GPU_WATCHER_RUNTIME_FILE ??
-  path.join(process.cwd(), 'data', 'settings.json');
+  path.join(process.cwd(), 'config', 'settings.json');
 
 function ensureRuntimeDir() {
   const dir = path.dirname(RUNTIME_FILE);
@@ -31,23 +41,15 @@ function ensureRuntimeDir() {
   }
 }
 
-function buildEnvConfig(): RuntimeConfig {
-  return {
-    pollIntervalMs: Number(
-      process.env.GPU_WATCHER_POLL_INTERVAL_MS ?? 60_000,
-    ),
-    idleWindow: Number(process.env.GPU_IDLE_WINDOW ?? 5),
-    idleThreshold: Number(process.env.GPU_IDLE_THRESHOLD ?? 0.1),
-    chartWindowHours: Number(process.env.GPU_CHART_WINDOW_HOURS ?? 24),
-    pinnedHosts: [],
-    hiddenHosts: [],
-    telegram: {
-      botToken: process.env.TELEGRAM_BOT_TOKEN ?? undefined,
-      chatId: process.env.TELEGRAM_CHAT_ID ?? undefined,
-      disableNotifications:
-        process.env.TELEGRAM_DISABLE_NOTIFICATIONS === 'true',
-    },
-  };
+function getRuntimeFileMtime() {
+  if (!fs.existsSync(RUNTIME_FILE)) {
+    return 0;
+  }
+  try {
+    return fs.statSync(RUNTIME_FILE).mtimeMs;
+  } catch {
+    return 0;
+  }
 }
 
 function readRuntimeFile() {
@@ -63,35 +65,68 @@ function readRuntimeFile() {
   }
 }
 
+function normalizeRuntimeConfig(config: RuntimeConfig): RuntimeConfig {
+  return {
+    ...config,
+    pinnedHosts: Array.from(new Set(config.pinnedHosts ?? [])),
+    hiddenHosts: Array.from(new Set(config.hiddenHosts ?? [])),
+    telegram: config.telegram ?? {},
+  };
+}
+
 function writeRuntimeFile(config: RuntimeConfig) {
   ensureRuntimeDir();
-  fs.writeFileSync(RUNTIME_FILE, JSON.stringify(config, null, 2), 'utf-8');
+  fs.writeFileSync(
+    RUNTIME_FILE,
+    JSON.stringify(normalizeRuntimeConfig(config), null, 2),
+    'utf-8',
+  );
 }
 
 function loadRuntimeConfig(): RuntimeConfig {
-  const envConfig = runtimeSchema.parse(buildEnvConfig());
   const fileConfig = readRuntimeFile();
   if (!fileConfig) {
-    writeRuntimeFile(envConfig);
-    return envConfig;
+    writeRuntimeFile(DEFAULT_RUNTIME);
+    return DEFAULT_RUNTIME;
   }
-  const merged: RuntimeConfig = {
-    ...envConfig,
-    ...fileConfig,
-    telegram: {
-      ...envConfig.telegram,
-      ...fileConfig.telegram,
-    },
-    pinnedHosts: Array.from(new Set(fileConfig.pinnedHosts ?? [])),
-    hiddenHosts: Array.from(new Set(fileConfig.hiddenHosts ?? [])),
-  };
+  const merged = normalizeRuntimeConfig(
+    runtimeSchema.parse({
+      ...DEFAULT_RUNTIME,
+      ...fileConfig,
+      telegram: {
+        ...fileConfig.telegram,
+      },
+    }),
+  );
   writeRuntimeFile(merged);
   return merged;
 }
 
 let currentRuntimeConfig = loadRuntimeConfig();
+let lastRuntimeFileMtime = getRuntimeFileMtime();
+
+function maybeReloadRuntimeFromDisk() {
+  if (!fs.existsSync(RUNTIME_FILE)) {
+    return;
+  }
+  let stats: fs.Stats;
+  try {
+    stats = fs.statSync(RUNTIME_FILE);
+  } catch {
+    return;
+  }
+  if (stats.mtimeMs <= lastRuntimeFileMtime) {
+    return;
+  }
+  const fileConfig = readRuntimeFile();
+  if (fileConfig) {
+    currentRuntimeConfig = normalizeRuntimeConfig(fileConfig);
+    lastRuntimeFileMtime = stats.mtimeMs;
+  }
+}
 
 export function getRuntimeConfig(): RuntimeConfig {
+  maybeReloadRuntimeFromDisk();
   return currentRuntimeConfig;
 }
 
@@ -115,6 +150,8 @@ export function updateRuntimeConfig(
       ...patch.telegram,
     },
   };
+  currentRuntimeConfig = normalizeRuntimeConfig(currentRuntimeConfig);
   writeRuntimeFile(currentRuntimeConfig);
+  lastRuntimeFileMtime = getRuntimeFileMtime();
   return currentRuntimeConfig;
 }
