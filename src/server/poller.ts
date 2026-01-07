@@ -80,9 +80,20 @@ async function processSnapshot(
     idleWindow,
   );
 
+  const shouldBootstrapIdle =
+    history.length > 0 && history.length < idleWindow;
+  const evaluationHistory =
+    shouldBootstrapIdle && history.length > 0
+      ? [
+          ...history,
+          ...Array(idleWindow - history.length).fill(
+            history[history.length - 1],
+          ),
+        ]
+      : history;
   const meetsIdleCriteria =
-    history.length === idleWindow &&
-    history.every((value) => value < idleThreshold);
+    evaluationHistory.length === idleWindow &&
+    evaluationHistory.every((value) => value < idleThreshold);
   const wasIdle = previousStatus?.isIdle ?? false;
 
   let idleSince = previousStatus?.idleSince;
